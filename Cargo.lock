@@ -253,7 +253,11 @@ dependencies = [
  "halo2-base",
  "halo2-ecc",
  "halo2curves",
+ "num-bigint",
+ "rand",
+ "rand_chacha",
  "rand_core",
+ "serde",
  "serde_json",
 ]
 
