@@ -92,8 +92,8 @@ impl<F: BigPrimeField> TestCircuit<F> {
     }
 
     pub fn synthesize(
-        builder:&mut BaseCircuitBuilder<F>,
-        fp_chip: &FpChip<F>,
+        builder:&mut BaseCircuitBuilder<bn256::Fr>,
+        fp_chip: &FpChip<bn256::Fr>,
     ) -> Result<(), Error> {
         let pairing_chip = PairingChip::new(fp_chip);
         let P = G1Affine::random(&mut rand::thread_rng());
@@ -136,7 +136,9 @@ impl <F: BigPrimeField> AppCircuit<F> for TestCircuit<F> {
         let ctx = builder.main(0);
         // // run the function, mutating `builder`
 
-        let res = pairing_test(ctx, &range, params, P, Q);
+        let fp_chip = FpChip::new(&range, params.limb_bits, params.num_limbs);
+        let res1 = Self::synthesize(&mut builder, &fp_chip);
+        // let res = pairing_test(ctx, &range, params, P, Q);
 
         // // helper check: if your function didn't use lookups, turn lookup table "off"
         let t_cells_lookup =
@@ -146,6 +148,9 @@ impl <F: BigPrimeField> AppCircuit<F> for TestCircuit<F> {
 
         // // // configure the circuit shape, 9 blinding rows seems enough
         builder.calculate_params(Some(9));
+        
+        
+
 
         Ok((builder))
         
