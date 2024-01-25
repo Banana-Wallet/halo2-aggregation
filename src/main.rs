@@ -4,7 +4,7 @@ use std::{
 
 // use super::*;
 use halo2_ecc::{
-    bn254::{self, pairing::{PairingChip}, Fp12Chip, Fp2Chip, FpChip}, ecc::EccChip, fields::FieldChip, halo2_base};
+    bigint::{big_is_zero::crt, check_carry_mod_to_zero::crt}, bn254::{self, pairing::{PairingChip}, Fp12Chip, Fp2Chip, FpChip}, ecc::EccChip, fields::FieldChip, halo2_base};
 use halo2_ecc::{
     // fields::FpStrategy
     fields::FpStrategy, 
@@ -109,7 +109,7 @@ impl<F: BigPrimeField> TestCircuit<F> {
             beta2: G2Affine::random(&mut rand::thread_rng()),
             gamma2: G2Affine::random(&mut rand::thread_rng()),
             delta2: G2Affine::random(&mut rand::thread_rng()),
-            ic: vec![G1Affine::random(&mut rand::thread_rng())],
+            ic: vec![G1Affine::random(&mut rand::thread_rng()), G1Affine::random(&mut rand::thread_rng())],
         };
         let alpha1_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), verif_key.alpha1);
         let beta2_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), verif_key.beta2);
@@ -117,14 +117,15 @@ impl<F: BigPrimeField> TestCircuit<F> {
         let delta2_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), verif_key.delta2);
         let ic_assigned = verif_key.ic.iter().map(|ic| pairing_chip.load_private_g1_unchecked(builder.main(0), *ic)).collect::<Vec<_>>();
 
-        println!("ic_assigned: {:?}", ic_assigned);
+        // println!("ic_assigned: {:?}", ic_assigned);
 
         // // let dummy_proof = get_dummy_proof();
         let dummy_proof = Proof {
             a: G1Affine::random(&mut rand::thread_rng()),
             b: G2Affine::random(&mut rand::thread_rng()),
             c: G1Affine::random(&mut rand::thread_rng()),
-            public_inputs: vec![Fr::from(20)]
+            //TODO change to Fr
+            public_inputs: vec![20]
         };
         let a_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), dummy_proof.a);
         let b_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), dummy_proof.b);
@@ -135,14 +136,24 @@ impl<F: BigPrimeField> TestCircuit<F> {
         let fp2_chip = Fp2Chip::<bn256::Fr>::new(fp_chip);
         let g2_chip = EccChip::new(&fp2_chip);
 
-        // let g1_zero_point = G1Affine::generator().mul(bn256::Fr::zero()).to_affine();
-        // let vk_x = pairing_chip.load_private_g1_unchecked(builder.main(0), g1_zero_point);
+        let g1_zero_point = G1Affine::generator().mul(bn256::Fr::zero()).to_affine();
+        let vk_x = pairing_chip.load_private_g1_unchecked(builder.main(0), g1_zero_point);
 
-        // for i in 0..ic_assigned.len() {
-        //     //TODO assert
-        //     let (x,y) = (&ic_assigned[i+1].x, &ic_assigned[i+1].y);
-        //     // let x_ic_mul_input = g2_chip.field_chip.mul(builder.main(0), x, public_inputs[i] );
-        // }
+        for i in 0..public_inputs.len() {
+            //TODO assert
+            let (x,y) = (&ic_assigned[i+1].x, &ic_assigned[i+1].y);
+
+            let x_ic_mul_input = 
+                g2_chip.field_chip.fp_chip().scalar_mul_no_carry(builder.main(0), x, public_inputs[i] as i64);
+
+            let y_ic_mul_input = 
+                g2_chip.field_chip.fp_chip().scalar_mul_no_carry(builder.main(0), y, public_inputs[i] as i64);
+
+            let x_ic_mul_input_add_vk_x = 
+                g2_chip.field_chip.fp_chip().scalar_mul_and_add_no_carry(builder.main(0), x, vk_x , public_inputs[i] as i64);
+
+            // g2_chip.field_chip.fp_chip().add_no_carry(builder.main(0), vk_x, x_ic_mul_input);
+        }
 
         // let Q = G2Affine::random(&mut rand::thread_rng());
         // let P_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), P);

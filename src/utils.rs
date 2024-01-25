@@ -72,7 +72,7 @@ pub struct Proof {
     pub a: G1Affine,
     pub b: G2Affine,
     pub c: G1Affine,
-    pub public_inputs: Vec<Fq>
+    pub public_inputs: Vec<u64>
 }
 
 
