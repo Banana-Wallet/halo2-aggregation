@@ -1,10 +1,10 @@
 use std::{
-    fs::{self, File}, io::{BufRead, BufReader}, marker::PhantomData
+    fs::{self, File}, io::{BufRead, BufReader}, marker::PhantomData, ops::Mul
 };
 
 // use super::*;
 use halo2_ecc::{
-    bn254::{self, pairing::{PairingChip}, Fp12Chip, FpChip}, fields::FieldChip, halo2_base};
+    bn254::{self, pairing::{PairingChip}, Fp12Chip, Fp2Chip, FpChip}, ecc::EccChip, fields::FieldChip, halo2_base};
 use halo2_ecc::{
     // fields::FpStrategy
     fields::FpStrategy, 
@@ -29,7 +29,7 @@ use halo2_base::{
             metadata::Column, MockProver
         }, halo2curves::{
             bn256::{
-                pairing, G1Affine, G2Affine
+                pairing, G1Affine, G2Affine, G1
             }
         }, plonk::{
             Selector, Advice
@@ -38,11 +38,16 @@ use halo2_base::{
     halo2_proofs::halo2curves::bn256::{self, Fr}
 };
 
+use halo2curves::group::Curve;
 // use halo2curves::bn256::Fr;
 // use halo2curves::bn256::pairing;
 use rand::rngs::StdRng;
 use rand_core::{Error, SeedableRng};
 use serde::{Deserialize, Serialize};
+
+mod utils;
+
+use utils::*;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct PairingCircuitParams {
@@ -79,6 +84,8 @@ fn pairing_test<F: BigPrimeField>(
 }
 
 
+
+
 #[derive(Clone, Debug)]
 pub struct TestCircuit<F: BigPrimeField> {
     _f: PhantomData<F>
@@ -96,11 +103,51 @@ impl<F: BigPrimeField> TestCircuit<F> {
         fp_chip: &FpChip<bn256::Fr>,
     ) -> Result<(), Error> {
         let pairing_chip = PairingChip::new(fp_chip);
-        let P = G1Affine::random(&mut rand::thread_rng());
-        let Q = G2Affine::random(&mut rand::thread_rng());
-        let P_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), P);
-        let Q_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), Q);
-        pairing_chip.pairing(builder.main(0), &Q_assigned, &P_assigned);
+        // let verif_key = get_verification_key();
+        let verif_key = VerificationKey {
+            alpha1: G1Affine::random(&mut rand::thread_rng()),
+            beta2: G2Affine::random(&mut rand::thread_rng()),
+            gamma2: G2Affine::random(&mut rand::thread_rng()),
+            delta2: G2Affine::random(&mut rand::thread_rng()),
+            ic: vec![G1Affine::random(&mut rand::thread_rng())],
+        };
+        let alpha1_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), verif_key.alpha1);
+        let beta2_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), verif_key.beta2);
+        let gamma2_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), verif_key.gamma2);
+        let delta2_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), verif_key.delta2);
+        let ic_assigned = verif_key.ic.iter().map(|ic| pairing_chip.load_private_g1_unchecked(builder.main(0), *ic)).collect::<Vec<_>>();
+
+        println!("ic_assigned: {:?}", ic_assigned);
+
+        // // let dummy_proof = get_dummy_proof();
+        let dummy_proof = Proof {
+            a: G1Affine::random(&mut rand::thread_rng()),
+            b: G2Affine::random(&mut rand::thread_rng()),
+            c: G1Affine::random(&mut rand::thread_rng()),
+            public_inputs: vec![Fr::from(20)]
+        };
+        let a_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), dummy_proof.a);
+        let b_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), dummy_proof.b);
+        let c_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), dummy_proof.c);
+        let public_inputs = dummy_proof.public_inputs;
+
+        // // let 
+        let fp2_chip = Fp2Chip::<bn256::Fr>::new(fp_chip);
+        let g2_chip = EccChip::new(&fp2_chip);
+
+        // let g1_zero_point = G1Affine::generator().mul(bn256::Fr::zero()).to_affine();
+        // let vk_x = pairing_chip.load_private_g1_unchecked(builder.main(0), g1_zero_point);
+
+        // for i in 0..ic_assigned.len() {
+        //     //TODO assert
+        //     let (x,y) = (&ic_assigned[i+1].x, &ic_assigned[i+1].y);
+        //     // let x_ic_mul_input = g2_chip.field_chip.mul(builder.main(0), x, public_inputs[i] );
+        // }
+
+        // let Q = G2Affine::random(&mut rand::thread_rng());
+        // let P_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), P);
+        // let Q_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), Q);
+        // pairing_chip.pairing(builder.main(0), &Q_assigned, &P_assigned);
         Ok(())
     }
 }
