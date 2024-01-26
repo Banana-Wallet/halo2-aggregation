@@ -1,5 +1,5 @@
 use std::{
-    fs::{self, File}, io::{BufRead, BufReader}, marker::PhantomData, ops::{Mul, Neg}
+    fs::{self, File}, io::{BufRead, BufReader}, marker::PhantomData, ops::{Add, Mul, Neg}
 };
 
 use ark_ff::fp;
@@ -40,6 +40,7 @@ use halo2_base::{
 };
 
 use halo2curves::group::Curve;
+use num_bigint::U64Digits;
 // use halo2curves::bn256::Fr;
 // use halo2curves::bn256::pairing;
 use rand::rngs::StdRng;
@@ -181,10 +182,53 @@ impl<F: BigPrimeField> TestCircuit<F> {
         vk_xy = fp_chip.carry_mod(builder.main(0), vk_xy_add_ic_zero_y);
 
         //TODO a_neg should be in circuit
+        let vk_x_affine= G1Affine{
+            x: bn256::Fq::from_u64_digits(&vk_xx.value().to_u64_digits()),
+            y: bn256::Fq::from_u64_digits(&vk_xy.value().to_u64_digits()),
+        };
+        let vk_x_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), vk_x_affine);
+        
+        {
+            //Sanity check
+            let mut vk_xdsdqw = verif_key.ic[0];
+            let l = public_inputs.len();
+            for i in 0..l {
+                //TODO
+                // assert!(input[i] < )
+                let vkx = verif_key.ic[i+1].x.mul(bn256::Fq::from_u64_digits(&[public_inputs[i]]));
+                let vky = verif_key.ic[i+1].y.mul(bn256::Fq::from_u64_digits(&[public_inputs[i]]));
+
+                vk_xdsdqw = vk_xdsdqw.add(
+                    G1Affine{
+                        x: vkx,
+                        y: vky
+                    }
+                ).to_affine();
+                // add(verif_key.ic[i+1].mul_bigint(&[dummy_proof.public_inputs[i];1])).into_affine();
+
+            }
+
+            // assert_eq!(
+            //     format!("vk_x_assigned {:?}", fp_chip.get_assigned_value(&vk_x_assigned)),
+            //     format!("vk_xdsdqw {:?}", vk_xdsdqw)
+            // )
+
+        }
+        
         let p1 = pairing_chip.pairing(builder.main(0), &b_assigned, &neg_a_assigned);
         let p2 = pairing_chip.pairing(builder.main(0), &beta2_assigned, &alpha1_assigned);
-        // let p3 = pairing_chip.pairing(builder.main(0), &gamma2_assigned, &vk);
+        let p3 = pairing_chip.pairing(builder.main(0), &gamma2_assigned, &vk_x_assigned);
         let p4 = pairing_chip.pairing(builder.main(0), &delta2_assigned, &c_assigned);
+
+
+        let fp12_chip = Fp12Chip::<bn256::Fr>::new(fp_chip);
+
+        let p1_p2 = fp12_chip.mul(builder.main(0), &p1, &p2);
+
+        let p3_p4 = fp12_chip.mul(builder.main(0), &p3, &p4);
+
+        let p1_p2_p3_p4 = fp12_chip.mul(builder.main(0), &p1_p2, &p3_p4);
+
 
         // let p1 = pairing_chip.pairing(builder.main(0), , P)
 
