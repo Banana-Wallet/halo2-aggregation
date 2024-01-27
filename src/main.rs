@@ -170,8 +170,14 @@ impl<F: BigPrimeField> TestCircuit<F> {
             let y_ic_mul_input_add_vk_y = 
                 g2_chip.field_chip.fp_chip().scalar_mul_and_add_no_carry(builder.main(0), y, vk_xy , public_inputs[i] as i64);
 
-            // let binding_vk_xx = fp_chip.carry_mod(builder.main(0), x_ic_mul_input_add_vk_x);
+            //TODO converting CRTInt to ProperCRTUint
             vk_xx = fp_chip.carry_mod(builder.main(0), x_ic_mul_input_add_vk_x);
+            println!("vk_xx {:?}", 
+                // G1Affine{
+                //     x: bn256::Fq::from_u64_digits(&vk_xx.value().to_u64_digits()),
+                //     y: bn256::Fq::from_u64_digits(&vk_xy.value().to_u64_digits()),
+                // })
+                &vk_xx.value());
             vk_xy = fp_chip.carry_mod(builder.main(0), y_ic_mul_input_add_vk_y);
         }
 
@@ -204,6 +210,9 @@ impl<F: BigPrimeField> TestCircuit<F> {
                         y: vky
                     }
                 ).to_affine();
+
+                println!("vk_xdsdqw {:?}", vk_xdsdqw);
+                
                 // add(verif_key.ic[i+1].mul_bigint(&[dummy_proof.public_inputs[i];1])).into_affine();
 
             }
@@ -215,22 +224,19 @@ impl<F: BigPrimeField> TestCircuit<F> {
 
         }
         
-        let p1 = pairing_chip.pairing(builder.main(0), &b_assigned, &neg_a_assigned);
-        let p2 = pairing_chip.pairing(builder.main(0), &beta2_assigned, &alpha1_assigned);
-        let p3 = pairing_chip.pairing(builder.main(0), &gamma2_assigned, &vk_x_assigned);
-        let p4 = pairing_chip.pairing(builder.main(0), &delta2_assigned, &c_assigned);
+        // let p1 = pairing_chip.pairing(builder.main(0), &b_assigned, &neg_a_assigned);
+        // let p2 = pairing_chip.pairing(builder.main(0), &beta2_assigned, &alpha1_assigned);
+        // let p3 = pairing_chip.pairing(builder.main(0), &gamma2_assigned, &vk_x_assigned);
+        // let p4 = pairing_chip.pairing(builder.main(0), &delta2_assigned, &c_assigned);
 
 
-        let fp12_chip = Fp12Chip::<bn256::Fr>::new(fp_chip);
+        // let fp12_chip = Fp12Chip::<bn256::Fr>::new(fp_chip);
 
-        let p1_p2 = fp12_chip.mul(builder.main(0), &p1, &p2);
+        // let p1_p2 = fp12_chip.mul(builder.main(0), &p1, &p2);
 
-        let p3_p4 = fp12_chip.mul(builder.main(0), &p3, &p4);
+        // let p3_p4 = fp12_chip.mul(builder.main(0), &p3, &p4);
 
-        let p1_p2_p3_p4 = fp12_chip.mul(builder.main(0), &p1_p2, &p3_p4);
-
-
-        // let p1 = pairing_chip.pairing(builder.main(0), , P)
+        // let p1_p2_p3_p4 = fp12_chip.mul(builder.main(0), &p1_p2, &p3_p4);
 
 
 
