@@ -149,14 +149,29 @@ impl<F: BigPrimeField> TestCircuit<F> {
             let (x,y) = (&ic_assigned[i+1].x, &ic_assigned[i+1].y);
 
 
-            {
+            {//a different aaproach
                 
+                let con = fp_chip.load_constant(ctx,  bn256::Fq::from_u64_digits(&[public_inputs[i]]));
+                let con2 = fp_chip.load_constant(ctx,  bn256::Fq::from_u64_digits(&[public_inputs[i]]));
                 let d_vk_xx = ic_0.x.clone();
-                let (d_x, _) = (&ic_1.x, &ic_1.y);
-                let x_ic_mul_input = fp_chip.scalar_mul_no_carry(ctx, d_x, 20);
+                let d_vk_xy = ic_0.y.clone();
+                let (d_x, d_y) = (&ic_1.x, &ic_1.y);
+                
+                let x_ic_mul_input = fp_chip.mul_no_carry (ctx, d_x, con);
+                let y_ic_mul_input = fp_chip.mul_no_carry (ctx, d_y, con2);
+                // let x_ic_mul_input = fp_chip.scalar_mul_no_carry(ctx, d_x, 20);
                 let x_ic_mul_input_add_vk_xx = fp_chip.add_no_carry(ctx, x_ic_mul_input, d_vk_xx );
                 let x_ic_mul_input_add_vk_xx_carry = fp_chip.carry_mod(ctx, x_ic_mul_input_add_vk_xx);
+
+                let y_ic_mul_input_add_vk_xy = fp_chip.add_no_carry(ctx, y_ic_mul_input, d_vk_xy );
+                let y_ic_mul_input_add_vk_xy_carry = fp_chip.carry_mod(ctx, y_ic_mul_input_add_vk_xy);
                 println!("x_ic_mul_input_add_vk_xx_carry {:?}", &x_ic_mul_input_add_vk_xx_carry.value());
+
+                let d_vk_x_affine= G1Affine{
+                    x: bn256::Fq::from_u64_digits(&x_ic_mul_input_add_vk_xx_carry.value().to_u64_digits()),
+                    y: bn256::Fq::from_u64_digits(&y_ic_mul_input_add_vk_xy_carry.value().to_u64_digits()),
+                };
+                println!("d_vk_x_affine {:?}", &d_vk_x_affine);
             }
 
             let x_ic_mul_input_add_vk_x = 
@@ -201,7 +216,6 @@ impl<F: BigPrimeField> TestCircuit<F> {
                 //TODO
                 // assert!(input[i] < )
                 vk_x =  (verif_key.ic[i+1].mul( bn256::Fr::from_u64_digits(&[public_inputs[i]]))).add(vk_x).to_affine();
-                
             }
 
             println!("vk_x {:?}", vk_x);
