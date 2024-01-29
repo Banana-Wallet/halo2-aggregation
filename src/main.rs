@@ -2,10 +2,10 @@ use std::{
     fs::{self, File}, io::{BufRead, BufReader}, marker::PhantomData, ops::{Add, Mul, Neg}
 };
 
-use ark_ff::fp;
+use ark_ff::{fp, fp2, BigInt, BigInteger};
 // use super::*;
 use halo2_ecc::{
-    bigint::{big_is_zero::crt, check_carry_mod_to_zero, ProperCrtUint}, bn254::{self, pairing::{PairingChip}, Fp12Chip, Fp2Chip, FpChip}, ecc::{EcPoint, EccChip}, fields::FieldChip, halo2_base};
+    bigint::{self, big_is_zero::crt, check_carry_mod_to_zero, ProperCrtUint}, bn254::{self, pairing::{PairingChip}, Fp12Chip, Fp2Chip, FpChip}, ecc::{self, EcPoint, EccChip}, fields::FieldChip, halo2_base};
 use halo2_ecc::{
     // fields::FpStrategy
     fields::FpStrategy, 
@@ -23,7 +23,7 @@ use halo2_base::{
         RangeChip
     }, 
     utils::{
-        BigPrimeField, testing::gen_proof
+        testing::gen_proof, BigPrimeField, ScalarField
     }, 
     Context, halo2_proofs::{
         dev::{
@@ -103,31 +103,20 @@ impl<F: BigPrimeField> TestCircuit<F> {
         builder:&mut BaseCircuitBuilder<bn256::Fr>,
         fp_chip: &FpChip<bn256::Fr>,
     ) -> Result<(), Error> {
+        let ctx = builder.main(0);
         let pairing_chip = PairingChip::new(fp_chip);
         // let verif_key = get_verification_key();
-        let verif_key = VerificationKey {
-            alpha1: G1Affine::random(&mut rand::thread_rng()),
-            beta2: G2Affine::random(&mut rand::thread_rng()),
-            gamma2: G2Affine::random(&mut rand::thread_rng()),
-            delta2: G2Affine::random(&mut rand::thread_rng()),
-            ic: vec![G1Affine::random(&mut rand::thread_rng()), G1Affine::random(&mut rand::thread_rng())],
-        };
-        let alpha1_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), verif_key.alpha1);
-        let beta2_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), verif_key.beta2);
-        let gamma2_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), verif_key.gamma2);
-        let delta2_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), verif_key.delta2);
-        let ic_assigned = verif_key.ic.iter().map(|ic| pairing_chip.load_private_g1_unchecked(builder.main(0), *ic)).collect::<Vec<_>>();
+        let verif_key = get_verification_key();
+        let alpha1_assigned = pairing_chip.load_private_g1_unchecked(ctx, verif_key.alpha1);
+        let beta2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.beta2);
+        let gamma2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.gamma2);
+        let delta2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.delta2);
+        let ic_assigned = verif_key.ic.iter().map(|ic| pairing_chip.load_private_g1_unchecked(ctx, *ic)).collect::<Vec<_>>();
 
         // println!("ic_assigned: {:?}", ic_assigned);
 
         // // let dummy_proof = get_dummy_proof();
-        let dummy_proof = Proof {
-            a: G1Affine::random(&mut rand::thread_rng()),
-            b: G2Affine::random(&mut rand::thread_rng()),
-            c: G1Affine::random(&mut rand::thread_rng()),
-            //TODO change to Fr
-            public_inputs: vec![20]
-        };
+        let dummy_proof = get_dummy_proof();
 
         //declare our chips for performing the ecc operations
         let fp2_chip = Fp2Chip::<bn256::Fr>::new(fp_chip);
@@ -135,87 +124,87 @@ impl<F: BigPrimeField> TestCircuit<F> {
 
         //extract the points of proof and public inputs
         let a_neg = dummy_proof.a.neg();
-        let neg_a_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), a_neg);
+        let neg_a_assigned = pairing_chip.load_private_g1_unchecked(ctx, a_neg);
         // let a_assigned_into = a_assigned.into();
         
-        // let neg_a_assigned = EcPoint::new(a_assigned_into.x, fp_chip.negate(builder.main(0), a_assigned_into.y));
-        // let neg_a_assigned = g2_chip.negate(builder.main(0), &a_assigned);
+        // let neg_a_assigned = EcPoint::new(a_assigned_into.x, fp_chip.negate(ctx, a_assigned_into.y));
+        // let neg_a_assigned = g2_chip.negate(ctx, &a_assigned);
 
-        // let neg_a_assigned = fp_chip.negate(builder.main(0), &a_assigned);
-        let b_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), dummy_proof.b);
-        let c_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), dummy_proof.c);
+        // let neg_a_assigned = fp_chip.negate(ctx, &a_assigned);
+        let b_assigned = pairing_chip.load_private_g2_unchecked(ctx, dummy_proof.b);
+        let c_assigned = pairing_chip.load_private_g1_unchecked(ctx, dummy_proof.c);
         let public_inputs = dummy_proof.public_inputs;
 
-        // // let 
-        
+        // Implement vk_x = vk.ic[0];
+        let vk_x_assigned = &ic_assigned[0];
+        let mut vk_xx = vk_x_assigned.x.clone();
+        let mut vk_xy = vk_x_assigned.y.clone();
+        println!("init vk_xx {:?}", &vk_xx.value());
 
-        let g1_zero_point = G1Affine::generator().mul(bn256::Fr::zero()).to_affine();
-        let binding = pairing_chip.load_private_g1_unchecked(builder.main(0), g1_zero_point);
-        let mut vk_xx = binding.x;
-        let mut vk_xy = binding.y;
+        let ic_0 = pairing_chip.load_private_g1_unchecked(ctx, verif_key.ic[0]);
+        let ic_1 = pairing_chip.load_private_g1_unchecked(ctx, verif_key.ic[1]);
 
         for i in 0..public_inputs.len() {
             //TODO assert
             let (x,y) = (&ic_assigned[i+1].x, &ic_assigned[i+1].y);
 
-            // let x_ic_mul_input = 
-            //     g2_chip.field_chip.fp_chip().scalar_mul_no_carry(builder.main(0), x, public_inputs[i] as i64);
 
-            // let y_ic_mul_input = 
-            //     g2_chip.field_chip.fp_chip().scalar_mul_no_carry(builder.main(0), y, public_inputs[i] as i64);
+            {
+                
+                let d_vk_xx = ic_0.x.clone();
+                let (d_x, _) = (&ic_1.x, &ic_1.y);
+                let x_ic_mul_input = fp_chip.scalar_mul_no_carry(ctx, d_x, 20);
+                let x_ic_mul_input_add_vk_xx = fp_chip.add_no_carry(ctx, x_ic_mul_input, d_vk_xx );
+                let x_ic_mul_input_add_vk_xx_carry = fp_chip.carry_mod(ctx, x_ic_mul_input_add_vk_xx);
+                println!("x_ic_mul_input_add_vk_xx_carry {:?}", &x_ic_mul_input_add_vk_xx_carry.value());
+            }
 
             let x_ic_mul_input_add_vk_x = 
-                g2_chip.field_chip.fp_chip().scalar_mul_and_add_no_carry(builder.main(0), x, vk_xx , public_inputs[i] as i64);
+                g2_chip.field_chip.fp_chip().scalar_mul_and_add_no_carry(ctx, x, vk_xx , public_inputs[i] as i64);
+            println!("x_ic_mul_input_add_vk_x {:?}", &x_ic_mul_input_add_vk_x.value);
+            
 
             let y_ic_mul_input_add_vk_y = 
-                g2_chip.field_chip.fp_chip().scalar_mul_and_add_no_carry(builder.main(0), y, vk_xy , public_inputs[i] as i64);
+                g2_chip.field_chip.fp_chip().scalar_mul_and_add_no_carry(ctx, y, vk_xy , public_inputs[i] as i64);
 
             //TODO converting CRTInt to ProperCRTUint
-            vk_xx = fp_chip.carry_mod(builder.main(0), x_ic_mul_input_add_vk_x);
-            println!("vk_xx {:?}", 
-                // G1Affine{
-                //     x: bn256::Fq::from_u64_digits(&vk_xx.value().to_u64_digits()),
-                //     y: bn256::Fq::from_u64_digits(&vk_xy.value().to_u64_digits()),
-                // })
-                &vk_xx.value());
-            vk_xy = fp_chip.carry_mod(builder.main(0), y_ic_mul_input_add_vk_y);
+            vk_xx = fp_chip.carry_mod(ctx, x_ic_mul_input_add_vk_x);
+
+            println!("vk_xx {:?}", &vk_xx.value());
+            // 9892176786327819563068104558876067336791813368026114567971856311473454212322     vk_xx
+            // 163109876889202746118792944775676992957665991469110880206795121573990037672403   x_ic_mul_input_add_vk_x
+            // 13251968311295594469648996761684988829700683503300492965985404526851470980489    correct val
+            
+            vk_xy = fp_chip.carry_mod(ctx, y_ic_mul_input_add_vk_y);
         }
 
-        let vk_xx_add_ic_zero_x = fp_chip.add_no_carry(builder.main(0), vk_xx, &ic_assigned[0].x);
-        let vk_xy_add_ic_zero_y = fp_chip.add_no_carry(builder.main(0), vk_xy, &ic_assigned[0].y);
+        // let vk_xx_add_ic_zero_x = fp_chip.add_no_carry(ctx, vk_xx, &ic_assigned[0].x);
+        // let vk_xy_add_ic_zero_y = fp_chip.add_no_carry(ctx, vk_xy, &ic_assigned[0].y);
 
-        vk_xx = fp_chip.carry_mod(builder.main(0), vk_xx_add_ic_zero_x);
-        vk_xy = fp_chip.carry_mod(builder.main(0), vk_xy_add_ic_zero_y);
+        // vk_xx = fp_chip.carry_mod(ctx, vk_xx_add_ic_zero_x);
+        println!("final vk_xx {:?}", &vk_xx.value());
+
+        // vk_xy = fp_chip.carry_mod(ctx, vk_xy_add_ic_zero_y);
 
         //TODO a_neg should be in circuit
         let vk_x_affine= G1Affine{
             x: bn256::Fq::from_u64_digits(&vk_xx.value().to_u64_digits()),
             y: bn256::Fq::from_u64_digits(&vk_xy.value().to_u64_digits()),
         };
-        let vk_x_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), vk_x_affine);
+
         
         {
             //Sanity check
-            let mut vk_xdsdqw = verif_key.ic[0];
+            let mut vk_x = verif_key.ic[0];
             let l = public_inputs.len();
             for i in 0..l {
                 //TODO
                 // assert!(input[i] < )
-                let vkx = verif_key.ic[i+1].x.mul(bn256::Fq::from_u64_digits(&[public_inputs[i]]));
-                let vky = verif_key.ic[i+1].y.mul(bn256::Fq::from_u64_digits(&[public_inputs[i]]));
-
-                vk_xdsdqw = vk_xdsdqw.add(
-                    G1Affine{
-                        x: vkx,
-                        y: vky
-                    }
-                ).to_affine();
-
-                println!("vk_xdsdqw {:?}", vk_xdsdqw);
+                vk_x =  (verif_key.ic[i+1].mul( bn256::Fr::from_u64_digits(&[public_inputs[i]]))).add(vk_x).to_affine();
                 
-                // add(verif_key.ic[i+1].mul_bigint(&[dummy_proof.public_inputs[i];1])).into_affine();
-
             }
+
+            println!("vk_x {:?}", vk_x);
 
             // assert_eq!(
             //     format!("vk_x_assigned {:?}", fp_chip.get_assigned_value(&vk_x_assigned)),
@@ -224,26 +213,26 @@ impl<F: BigPrimeField> TestCircuit<F> {
 
         }
         
-        // let p1 = pairing_chip.pairing(builder.main(0), &b_assigned, &neg_a_assigned);
-        // let p2 = pairing_chip.pairing(builder.main(0), &beta2_assigned, &alpha1_assigned);
-        // let p3 = pairing_chip.pairing(builder.main(0), &gamma2_assigned, &vk_x_assigned);
-        // let p4 = pairing_chip.pairing(builder.main(0), &delta2_assigned, &c_assigned);
+        // let p1 = pairing_chip.pairing(ctx, &b_assigned, &neg_a_assigned);
+        // let p2 = pairing_chip.pairing(ctx, &beta2_assigned, &alpha1_assigned);
+        // let p3 = pairing_chip.pairing(ctx, &gamma2_assigned, &vk_x_assigned);
+        // let p4 = pairing_chip.pairing(ctx, &delta2_assigned, &c_assigned);
 
 
         // let fp12_chip = Fp12Chip::<bn256::Fr>::new(fp_chip);
 
-        // let p1_p2 = fp12_chip.mul(builder.main(0), &p1, &p2);
+        // let p1_p2 = fp12_chip.mul(ctx, &p1, &p2);
 
-        // let p3_p4 = fp12_chip.mul(builder.main(0), &p3, &p4);
+        // let p3_p4 = fp12_chip.mul(ctx, &p3, &p4);
 
-        // let p1_p2_p3_p4 = fp12_chip.mul(builder.main(0), &p1_p2, &p3_p4);
+        // let p1_p2_p3_p4 = fp12_chip.mul(ctx, &p1_p2, &p3_p4);
 
 
 
         // let Q = G2Affine::random(&mut rand::thread_rng());
-        // let P_assigned = pairing_chip.load_private_g1_unchecked(builder.main(0), P);
-        // let Q_assigned = pairing_chip.load_private_g2_unchecked(builder.main(0), Q);
-        // pairing_chip.pairing(builder.main(0), &Q_assigned, &P_assigned);
+        // let P_assigned = pairing_chip.load_private_g1_unchecked(ctx, P);
+        // let Q_assigned = pairing_chip.load_private_g2_unchecked(ctx, Q);
+        // pairing_chip.pairing(ctx, &Q_assigned, &P_assigned);
         Ok(())
     }
 }
