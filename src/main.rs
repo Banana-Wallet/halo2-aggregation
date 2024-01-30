@@ -17,6 +17,9 @@ use halo2_ecc::{
     // halo2_proofs::halo2curves::bn256::G2Affine
 };
 
+use std::time::{Instant, Duration};
+
+
 use halo2_base::{
     gates::{
         circuit::{
@@ -156,6 +159,21 @@ impl<F: BigPrimeField> TestCircuit<F> {
         let p1_p2_p3_p4 = fp12_chip.mul(ctx, &p1_p2, &p3_p4);
 
         println!("p1_p2_p3_p4 {:?}", fp12_chip.get_assigned_value(&p1_p2_p3_p4.into()));
+
+
+        let p12 = pairing_chip.pairing(ctx, &b_assigned, &neg_a_assigned);
+        let p22 = pairing_chip.pairing(ctx, &beta2_assigned, &alpha1_assigned);
+        let p32 = pairing_chip.pairing(ctx, &gamma2_assigned, &vk_x_assigned);
+        let p42 = pairing_chip.pairing(ctx, &delta2_assigned, &c_assigned);
+
+
+        let fp12_chip2 = Fp12Chip::<F>::new(fp_chip);
+
+        let p1_p22 = fp12_chip.mul(ctx, &p12, &p22);
+
+        let p3_p42 = fp12_chip.mul(ctx, &p32, &p42);
+
+        let p1_p2_p3_p42 = fp12_chip.mul(ctx, &p1_p22, &p3_p42);
         Ok(())
     }
 }
@@ -229,8 +247,13 @@ fn test_pairing_circuit() {
         params, 
         P, 
         Q).unwrap();
+
+    let start_time = Instant::now();
     MockProver::run(params.degree, &circuit, vec![]).unwrap().assert_satisfied();
-    
+    let end_time = Instant::now();
+    let elapsed_time = end_time.duration_since(start_time);
+
+    println!("Elapsed time in proof generation: {:?}", elapsed_time);
     // let prover = MockProver::<Fr>::run(9, &circuit, vec![]).unwrap();
 }
 
