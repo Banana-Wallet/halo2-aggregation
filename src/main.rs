@@ -6,7 +6,11 @@ use std::{
 use ark_ff::{fp, fp2, BigInt, BigInteger};
 // use super::*;
 use halo2_ecc::{
-    bigint::{self, big_is_zero::crt, check_carry_mod_to_zero, ProperCrtUint}, bn254::{self, pairing::{PairingChip}, Fp12Chip, Fp2Chip, FpChip}, ecc::{self, EcPoint, EccChip}, fields::FieldChip, halo2_base};
+    bigint::{self, big_is_zero::crt, check_carry_mod_to_zero, ProperCrtUint}, 
+    bn254::{self, pairing::{PairingChip}, Fp12Chip, Fp2Chip, FpChip, FpPoint}, 
+    ecc::{self, EcPoint, EccChip, scalar_multiply, ec_add_unequal, ec_double}, 
+    fields::FieldChip, halo2_base
+};
 use halo2_ecc::{
     // fields::FpStrategy
     fields::FpStrategy, 
@@ -24,7 +28,7 @@ use halo2_base::{
         RangeChip
     }, 
     utils::{
-        testing::gen_proof, BigPrimeField, ScalarField
+        testing::gen_proof, BigPrimeField, CurveAffineExt, ScalarField
     }, 
     Context, halo2_proofs::{
         dev::{
@@ -40,7 +44,7 @@ use halo2_base::{
     halo2_proofs::halo2curves::bn256::{self, Fr}
 };
 
-use halo2curves::group::Curve;
+use halo2curves::{group::Curve, CurveAffine};
 use num_bigint::U64Digits;
 // use halo2curves::bn256::Fr;
 // use halo2curves::bn256::pairing;
@@ -63,6 +67,7 @@ struct PairingCircuitParams {
     limb_bits: usize,
     num_limbs: usize,
 }
+
 
 #[derive(Clone, Debug)]
 pub struct TestCircuit<F: BigPrimeField> {
@@ -102,118 +107,39 @@ impl<F: BigPrimeField> TestCircuit<F> {
         //extract the points of proof and public inputs
         let a_neg = dummy_proof.a.neg();
         let neg_a_assigned = pairing_chip.load_private_g1_unchecked(ctx, a_neg);
-        // let a_assigned_into = a_assigned.into();
-        
-        // let neg_a_assigned = EcPoint::new(a_assigned_into.x, fp_chip.negate(ctx, a_assigned_into.y));
-        // let neg_a_assigned = g2_chip.negate(ctx, &a_assigned);
-
-        // let neg_a_assigned = fp_chip.negate(ctx, &a_assigned);
         let b_assigned = pairing_chip.load_private_g2_unchecked(ctx, dummy_proof.b);
         let c_assigned = pairing_chip.load_private_g1_unchecked(ctx, dummy_proof.c);
         let public_inputs = dummy_proof.public_inputs;
 
         // Implement vk_x = vk.ic[0];
-        let mut vk_x_assigned = &ic_assigned[0];
-        let mut vk_xx = vk_x_assigned.x.clone();
-        let mut vk_xy = vk_x_assigned.y.clone();
-        println!("init vk_xx {:?}", &vk_xx.value());
-
-        let ic_0 = pairing_chip.load_private_g1_unchecked(ctx, verif_key.ic[0]);
-        let ic_1 = pairing_chip.load_private_g1_unchecked(ctx, verif_key.ic[1]);
-
+        let mut vk_x_assigned = &ic_assigned[0].clone();
+        let mut temp;
         for i in 0..public_inputs.len() {
-           
+        
+                //second different approach
+            let public_value = fp_chip.load_constant(ctx,  bn256::Fq::from_u64_digits(&[public_inputs[i]]));
+            let base_chip = g2_chip.field_chip;
+            let vk_x_i_plus_1 = ic_assigned[i+1].clone();
 
-            {   
-                //a different aaproach
-                
-                let con = fp_chip.load_constant(ctx,  bn256::Fq::from_u64_digits(&[public_inputs[i]]));
-                let con2 = fp_chip.load_constant(ctx,  bn256::Fq::from_u64_digits(&[public_inputs[i]]));
-                let d_vk_xx = ic_0.x.clone();
-                let d_vk_xy = ic_0.y.clone();
-                let (d_x, d_y) = (&ic_1.x, &ic_1.y);
-                
-                let x_ic_mul_input = fp_chip.mul_no_carry (ctx, d_x, con);
-                let y_ic_mul_input = fp_chip.mul_no_carry (ctx, d_y, con2);
-                // let x_ic_mul_input = fp_chip.scalar_mul_no_carry(ctx, d_x, 20);
-                let x_ic_mul_input_add_vk_xx = fp_chip.add_no_carry(ctx, x_ic_mul_input, d_vk_xx );
-                let x_ic_mul_input_add_vk_xx_carry = fp_chip.carry_mod(ctx, x_ic_mul_input_add_vk_xx);
+            let vk_x_mul_input = scalar_multiply::<F,_,G1Affine >(
+                base_chip.fp_chip(), 
+                ctx,
+                vk_x_i_plus_1.clone(),
+                public_value.limbs().to_vec(),
+                g2_chip.field_chip.fp_chip().limb_bits,
+                4);
 
-                let y_ic_mul_input_add_vk_xy = fp_chip.add_no_carry(ctx, y_ic_mul_input, d_vk_xy );
-                let y_ic_mul_input_add_vk_xy_carry = fp_chip.carry_mod(ctx, y_ic_mul_input_add_vk_xy);
-                println!("x_ic_mul_input_add_vk_xx_carry {:?}", &x_ic_mul_input_add_vk_xx_carry.value());
 
-                let d_vk_x_affine= G1Affine{
-                    x: bn256::Fq::from_u64_digits(&x_ic_mul_input_add_vk_xx_carry.value().to_u64_digits()),
-                    y: bn256::Fq::from_u64_digits(&y_ic_mul_input_add_vk_xy_carry.value().to_u64_digits()),
-                };
-                println!("d_vk_x_affine {:?}", &d_vk_x_affine);
-            }
+            temp = ec_add_unequal(
+                base_chip.fp_chip(), 
+                ctx, 
+                vk_x_mul_input.clone(), 
+                vk_x_assigned.clone(), 
+                true);
 
-             //TODO assert
-            let (x,y) = (&ic_assigned[i+1].x, &ic_assigned[i+1].y);
+            vk_x_assigned = &temp;
 
-            let x_ic_mul_input_add_vk_x = 
-                g2_chip.field_chip.fp_chip().scalar_mul_and_add_no_carry(ctx, x, vk_xx , public_inputs[i] as i64);
-            println!("x_ic_mul_input_add_vk_x {:?}", &x_ic_mul_input_add_vk_x.value);
-            
-
-            let y_ic_mul_input_add_vk_y = 
-                g2_chip.field_chip.fp_chip().scalar_mul_and_add_no_carry(ctx, y, vk_xy , public_inputs[i] as i64);
-
-            //TODO converting CRTInt to ProperCRTUint
-            vk_xx = fp_chip.carry_mod(ctx, x_ic_mul_input_add_vk_x);
-
-            println!("vk_xx {:?}", &vk_xx.value());
-            // 9892176786327819563068104558876067336791813368026114567971856311473454212322     vk_xx
-            // 163109876889202746118792944775676992957665991469110880206795121573990037672403   x_ic_mul_input_add_vk_x
-            // 13251968311295594469648996761684988829700683503300492965985404526851470980489    correct val
-            
-            vk_xy = fp_chip.carry_mod(ctx, y_ic_mul_input_add_vk_y);
         }
-
-        // let vk_xx_add_ic_zero_x = fp_chip.add_no_carry(ctx, vk_xx, &ic_assigned[0].x);
-        // let vk_xy_add_ic_zero_y = fp_chip.add_no_carry(ctx, vk_xy, &ic_assigned[0].y);
-
-        // vk_xx = fp_chip.carry_mod(ctx, vk_xx_add_ic_zero_x);
-        // println!("final vk_xx {:?}", &vk_xx.value());
-
-        // vk_xy = fp_chip.carry_mod(ctx, vk_xy_add_ic_zero_y);
-
-        //TODO a_neg should be in circuit
-        let vk_x_affine= G1Affine{
-            x: bn256::Fq::from_u64_digits(&vk_xx.value().to_u64_digits()),
-            y: bn256::Fq::from_u64_digits(&vk_xy.value().to_u64_digits()),
-        };
-
-        let binding = pairing_chip.load_private_g1_unchecked(ctx, vk_x_affine);
-        vk_x_assigned = &binding;
-
-        println!("vk_x_affine {:?}", &vk_x_affine);
-
-        
-        {
-            //Sanity check
-            let mut vk_x = verif_key.ic[0];
-            let l = public_inputs.len();
-            for i in 0..l {
-                //TODO
-                // assert!(input[i] < )
-                vk_x =  (verif_key.ic[i+1].mul( bn256::Fr::from_u64_digits(&[public_inputs[i]]))).add(vk_x).to_affine();
-            }
-
-            println!("vk_x {:?}", vk_x);
-
-            // assert_eq!(
-            //     format!("vk_x_assigned {:?}", fp_chip.get_assigned_value(&vk_x_assigned)),
-            //     format!("vk_xdsdqw {:?}", vk_xdsdqw)
-            // )
-
-        
-        }
-        // let binding = pairing_chip.load_private_g1_unchecked(ctx, vk_x);
-        // vk_x_assigned = &binding;
-        
 
         let p1 = pairing_chip.pairing(ctx, &b_assigned, &neg_a_assigned);
         let p2 = pairing_chip.pairing(ctx, &beta2_assigned, &alpha1_assigned);
@@ -230,11 +156,6 @@ impl<F: BigPrimeField> TestCircuit<F> {
         let p1_p2_p3_p4 = fp12_chip.mul(ctx, &p1_p2, &p3_p4);
 
         println!("p1_p2_p3_p4 {:?}", fp12_chip.get_assigned_value(&p1_p2_p3_p4.into()));
-
-        // let Q = G2Affine::random(&mut rand::thread_rng());
-        // let P_assigned = pairing_chip.load_private_g1_unchecked(ctx, P);
-        // let Q_assigned = pairing_chip.load_private_g2_unchecked(ctx, Q);
-        // pairing_chip.pairing(ctx, &Q_assigned, &P_assigned);
         Ok(())
     }
 }
