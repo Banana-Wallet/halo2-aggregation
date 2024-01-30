@@ -1,4 +1,4 @@
-#Halo2 Aggregation circuit for N Groth16 proofs
+# Halo2 Aggregation circuit for N Groth16 proofs
 
 To run the tests
 
