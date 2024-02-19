@@ -147,6 +147,33 @@ pub fn get_verification_key() -> VerificationKey {
 }
 
 
+pub fn get_r0_proof() -> Proof {
+    Proof {
+        a: G1Affine{
+            x: bn256::Fq::from_str_vartime("13260276032418998651443538824193049589123114956926792946594134764022000816562").unwrap(),
+            y: bn256::Fq::from_str_vartime("5167640230539274142304274045727640058373784936329623387968009881859270794902").unwrap()
+        }, 
+        b: G2Affine{
+            x: bn256::Fq2::new(
+                bn256::Fq::from_str_vartime("7757803224683569033741736680656787451157316953083975465016761210409447042085").unwrap(),
+
+                bn256::Fq::from_str_vartime("10567087324407133650922565101452207841667968057317044436605321405883373098510").unwrap(),
+            ), 
+            y: bn256::Fq2::new(
+                bn256::Fq::from_str_vartime("4154698842299342687716733663963774183350245344082643024876568733757548954572").unwrap(),
+
+                bn256::Fq::from_str_vartime("457572965494851714920701078104055244867150196245707373658530988008746205753").unwrap(),
+            )
+        },
+        c: G1Affine{
+            x: bn256::Fq::from_str_vartime("912029144283342253430074020875773320940610572316000372447554232903960396096").unwrap(),
+            y: bn256::Fq::from_str_vartime("18905415622575708886101027892832048186612990562549466021443631829394831237150").unwrap()
+        },
+        public_inputs: vec![20]
+    }
+}
+
+
 #[test]
 
 fn test_proof() {
@@ -163,4 +190,11 @@ fn test_verification_key() {
     println!("{:?}", get_verification_key().delta2.is_on_curve());
     println!("{:?}", get_verification_key().ic[0].is_on_curve());
     println!("{:?}", get_verification_key().ic[1].is_on_curve());
+}
+
+#[test]
+fn test_r0_proof() {
+    println!("{:?}", get_r0_proof().a.is_on_curve());
+    println!("{:?}", get_r0_proof().b.is_on_curve());
+    println!("{:?}", get_r0_proof().c.is_on_curve());
 }

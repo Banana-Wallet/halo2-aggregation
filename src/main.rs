@@ -3,7 +3,7 @@ use std::{
     fs::{self, File}, io::{BufRead, BufReader}, marker::PhantomData, ops::{Add, Mul, Neg}
 };
 
-use ark_ff::{fp, fp2, BigInt, BigInteger};
+use ark_ff::{fp, fp2, BigInt, BigInteger, Fp256};
 // use super::*;
 use halo2_ecc::{
     bigint::{self, big_is_zero::crt, check_carry_mod_to_zero, ProperCrtUint}, 
@@ -47,7 +47,7 @@ use halo2_base::{
     halo2_proofs::halo2curves::bn256::{self, Fr}
 };
 
-use halo2curves::{group::Curve, CurveAffine};
+use halo2curves::{ff::{BitViewSized, PrimeField}, group::Curve, CurveAffine};
 use num_bigint::U64Digits;
 // use halo2curves::bn256::Fr;
 // use halo2curves::bn256::pairing;
@@ -56,8 +56,10 @@ use rand_core::{Error, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 mod utils;
+mod utils2;
 
 use utils::*;
+use utils2::*;
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct PairingCircuitParams {
@@ -91,7 +93,7 @@ impl<F: BigPrimeField> TestCircuit<F> {
         let ctx = builder.main(0);
         let pairing_chip = PairingChip::new(fp_chip);
         // let verif_key = get_verification_key();
-        let verif_key = get_verification_key();
+        let verif_key = get_verification_key2();
         let alpha1_assigned = pairing_chip.load_private_g1_unchecked(ctx, verif_key.alpha1);
         let beta2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.beta2);
         let gamma2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.gamma2);
@@ -101,7 +103,7 @@ impl<F: BigPrimeField> TestCircuit<F> {
         // println!("ic_assigned: {:?}", ic_assigned);
 
         // // let dummy_proof = get_dummy_proof();
-        let dummy_proof = get_dummy_proof();
+        let dummy_proof = get_dummy_proof2();
 
         //declare our chips for performing the ecc operations
         let fp2_chip = Fp2Chip::<F>::new(fp_chip);
@@ -120,7 +122,7 @@ impl<F: BigPrimeField> TestCircuit<F> {
         for i in 0..public_inputs.len() {
         
                 //second different approach
-            let public_value = fp_chip.load_constant(ctx,  bn256::Fq::from_u64_digits(&[public_inputs[i]]));
+            let public_value = fp_chip.load_constant(ctx,  bn256::Fq::from_str_vartime(&public_inputs[i]).unwrap());
             let base_chip = g2_chip.field_chip;
             let vk_x_i_plus_1 = ic_assigned[i+1].clone();
 
@@ -233,6 +235,24 @@ impl <F: BigPrimeField> AppCircuit<F> for TestCircuit<F> {
 
 #[test]
 fn test_pairing_circuit() {
+
+    // let a  = vec![
+    //     29, 81, 12, 222, 49, 79, 63, 66, 226, 208, 219, 255, 73, 50, 241, 196, 116, 
+    //     140, 85, 176, 155, 85, 9, 6, 32, 28, 107, 25, 85, 36, 145, 178
+    // ];
+
+    // BigInt::from_bits_be(a);
+
+
+    // let concatenated_string: String = a.iter().map(|&x| x.to_string()).collect();
+
+    // let b = concatenated_string.as_bytes();
+
+
+    // Parse the concatenated string into a BigInt
+    // let big_int_value = BigInt::from_bits_le(concatenated_string.as_bytes()).unwrap();
+
+    // println!("BigInt value: {}", big_int_value);
 
     let path = "/Users/rishabh/projects/blockchain/avail-project/halo2-aggregation/src/configs/bn254/pairing_circuit.config";
     let params: PairingCircuitParams = serde_json::from_reader(
