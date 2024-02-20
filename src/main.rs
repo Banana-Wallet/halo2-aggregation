@@ -277,12 +277,20 @@ fn generate_circuit(k: u32, fill: bool) -> Snark {
     let lookups_bits = k as usize - 1;
     let circuit_params = BaseCircuitParams {
         k: k as usize,
-        num_advice_per_phase: vec![30],
+        num_advice_per_phase: vec![20],
         num_lookup_advice_per_phase: vec![5],
         num_fixed: 1,
-        lookup_bits: Some(18), 
+        lookup_bits: Some(lookups_bits), 
         num_instance_columns: 1,
     };
+    // let circuit_params = BaseCircuitParams {
+    //     k: k as usize,
+    //     num_advice_per_phase: vec![30],
+    //     num_lookup_advice_per_phase: vec![5],
+    //     num_fixed: 1,
+    //     lookup_bits: Some(18), 
+    //     num_instance_columns: 1,
+    // };
     let mut builder = BaseCircuitBuilder::new(false).use_params(circuit_params);
     let range = builder.range_chip();
 
@@ -412,22 +420,23 @@ pub fn gen_srss(k: u32) -> ParamsKZG<Bn256> {
 
 
 fn main(){
-    let dummy_snark = generate_circuit(19, false);
+    let dummy_snark = generate_circuit(9, false);
 
-    let k = 20u32;
+    let k = 16u32;
     let lookup_bits = k as usize - 1;
     let params = gen_srs(k);
     let mut agg_circuit = AggregationCircuit::new::<SHPLONK>(
         CircuitBuilderStage::Keygen,
         AggregationConfigParams { degree: k, lookup_bits,..Default::default() },
         &params,
-        vec![dummy_snark.clone(), dummy_snark.clone()],
+        vec![dummy_snark.clone()],
         VerifierUniversality::Full,
     );
     let agg_config = agg_circuit.calculate_params(Some(10));
+    let pk = gen_pk(&params, &agg_circuit, None);
 
     // let start0 = start_timer!(|| "gen vk & pk");
-    let pk = gen_pk(&params, &agg_circuit, None);
+
     // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
     // let _pk = gen_pk(&params, &agg_circuit, Some(Path::new("examples/agg.pk")));
     // end_timer!(start0);
@@ -435,7 +444,7 @@ fn main(){
     // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
     let break_points = agg_circuit.break_points();
 
-    let snarks = (19..20).map(|k| generate_circuit(k, true));
+    let snarks = (10..13).map(|k| generate_circuit(k, true));
     for (i, snark) in snarks.into_iter().enumerate() {
         let agg_circuit = AggregationCircuit::new::<SHPLONK>(
             CircuitBuilderStage::Prover,
