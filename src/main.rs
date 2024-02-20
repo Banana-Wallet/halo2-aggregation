@@ -276,8 +276,8 @@ fn test_pairing_circuit() {
 fn generate_circuit(k: u32, fill: bool) -> Snark {
     let lookups_bits = k as usize - 1;
     let circuit_params = BaseCircuitParams {
-        k: 19 as usize,
-        num_advice_per_phase: vec![15],
+        k: k as usize,
+        num_advice_per_phase: vec![25],
         num_lookup_advice_per_phase: vec![5],
         num_fixed: 1,
         lookup_bits: Some(18), 
@@ -353,27 +353,28 @@ fn generate_circuit(k: u32, fill: bool) -> Snark {
 
     }
 
-    // let p1 = pairing_chip.pairing(ctx, &b_assigned, &neg_a_assigned);
-    // let p2 = pairing_chip.pairing(ctx, &beta2_assigned, &alpha1_assigned);
-    // let p3 = pairing_chip.pairing(ctx, &gamma2_assigned, &vk_x_assigned);
-    // let p4 = pairing_chip.pairing(ctx, &delta2_assigned, &c_assigned);
+    let p1 = pairing_chip.pairing(ctx, &b_assigned, &neg_a_assigned);
+    let p2 = pairing_chip.pairing(ctx, &beta2_assigned, &alpha1_assigned);
+    let p3 = pairing_chip.pairing(ctx, &gamma2_assigned, &vk_x_assigned);
+    let p4 = pairing_chip.pairing(ctx, &delta2_assigned, &c_assigned);
 
 
-    // let fp12_chip = Fp12Chip::<Fr>::new(&fp_chip);
+    let fp12_chip = Fp12Chip::<Fr>::new(&fp_chip);
 
-    // let p1_p2 = fp12_chip.mul(ctx, &p1, &p2);
+    let p1_p2 = fp12_chip.mul(ctx, &p1, &p2);
 
-    // let p3_p4 = fp12_chip.mul(ctx, &p3, &p4);
+    let p3_p4 = fp12_chip.mul(ctx, &p3, &p4);
 
-    // let p1_p2_p3_p4 = fp12_chip.mul(ctx, &p1_p2, &p3_p4);
+    let p1_p2_p3_p4 = fp12_chip.mul(ctx, &p1_p2, &p3_p4);
 
-    // println!("p1_p2_p3_p4 {:?}", fp12_chip.get_assigned_value(&p1_p2_p3_p4.into()));
+    println!("p1_p2_p3_p4 {:?}", fp12_chip.get_assigned_value(&p1_p2_p3_p4.into()));
 
     
     let params = gen_srss(k);
     println!("Got params");
     // do not call calculate_params, we want to use fixed params
     let pk = gen_pk(&params, &builder, None);
+    println!("Got pk");
 
     gen_snark_shplonk(&params, &pk, builder, None::<&str>)
 
@@ -427,26 +428,26 @@ fn main(){
     );
     let agg_config = agg_circuit.calculate_params(Some(10));
 
-    // // let start0 = start_timer!(|| "gen vk & pk");
-    // let pk = gen_pk(&params, &agg_circuit, None);
-    // // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
-    // // let _pk = gen_pk(&params, &agg_circuit, Some(Path::new("examples/agg.pk")));
-    // // end_timer!(start0);
-    // // let pk = read_pk::<AggregationCircuit>(Path::new("examples/agg.pk"), agg_config).unwrap();
-    // // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
-    // let break_points = agg_circuit.break_points();
+    // let start0 = start_timer!(|| "gen vk & pk");
+    let pk = gen_pk(&params, &agg_circuit, None);
+    // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
+    // let _pk = gen_pk(&params, &agg_circuit, Some(Path::new("examples/agg.pk")));
+    // end_timer!(start0);
+    // let pk = read_pk::<AggregationCircuit>(Path::new("examples/agg.pk"), agg_config).unwrap();
+    // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
+    let break_points = agg_circuit.break_points();
 
-    // let snarks = (10..11).map(|k| generate_circuit(k, true));
-    // for (i, snark) in snarks.into_iter().enumerate() {
-    //     let agg_circuit = AggregationCircuit::new::<SHPLONK>(
-    //         CircuitBuilderStage::Prover,
-    //         agg_config,
-    //         &params,
-    //         vec![snark],
-    //         VerifierUniversality::Full,
-    //     )
-    //     .use_break_points(break_points.clone());
-    //     let _snark = gen_snark_shplonk(&params, &pk, agg_circuit, None::<&str>);
-    //     println!("snark {i} success");
-    // }
+    let snarks = (19..20).map(|k| generate_circuit(k, true));
+    for (i, snark) in snarks.into_iter().enumerate() {
+        let agg_circuit = AggregationCircuit::new::<SHPLONK>(
+            CircuitBuilderStage::Prover,
+            agg_config,
+            &params,
+            vec![snark],
+            VerifierUniversality::Full,
+        )
+        .use_break_points(break_points.clone());
+        let _snark = gen_snark_shplonk(&params, &pk, agg_circuit, None::<&str>);
+        println!("snark {i} success");
+    }
 }
