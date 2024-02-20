@@ -419,9 +419,9 @@ fn main(){
     let params = gen_srs(k);
     let mut agg_circuit = AggregationCircuit::new::<SHPLONK>(
         CircuitBuilderStage::Keygen,
-        AggregationConfigParams { degree: k, lookup_bits, num_advice:100 ,..Default::default() },
+        AggregationConfigParams { degree: k, lookup_bits,..Default::default() },
         &params,
-        vec![dummy_snark.clone(), dummy_snark.clone()],
+        vec![dummy_snark.clone()],
         VerifierUniversality::Full,
     );
     let agg_config = agg_circuit.calculate_params(Some(10));
