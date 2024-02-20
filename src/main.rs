@@ -277,7 +277,7 @@ fn generate_circuit(k: u32, fill: bool) -> Snark {
     let lookups_bits = k as usize - 1;
     let circuit_params = BaseCircuitParams {
         k: k as usize,
-        num_advice_per_phase: vec![25],
+        num_advice_per_phase: vec![30],
         num_lookup_advice_per_phase: vec![5],
         num_fixed: 1,
         lookup_bits: Some(18), 
