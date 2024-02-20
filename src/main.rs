@@ -1,6 +1,6 @@
 
 use std::{
-    fs::{self, File}, io::{BufRead, BufReader}, marker::PhantomData, ops::{Add, Mul, Neg}
+    env::var, fs::{self, File}, io::{BufRead, BufReader, BufWriter}, marker::PhantomData, ops::{Add, Mul, Neg}
 };
 
 use ark_ff::{fp, fp2, BigInt, BigInteger, Fp256};
@@ -16,6 +16,8 @@ use halo2_ecc::{
     fields::FpStrategy, 
     // halo2_proofs::halo2curves::bn256::G2Affine
 };
+use rand_chacha::ChaCha20Rng;
+use snark_verifier_sdk::{gen_pk, halo2::{aggregation::{AggregationCircuit, AggregationConfigParams, VerifierUniversality}, gen_snark_shplonk}, Snark, SHPLONK};
 
 use std::time::{Instant, Duration};
 
@@ -25,26 +27,19 @@ use halo2_base::{
         circuit::{
             builder::{
                 self, BaseCircuitBuilder, RangeCircuitBuilder
-            }, 
-            CircuitBuilderStage
-        }, 
-        RangeChip
-    }, 
-    utils::{
-        testing::gen_proof, BigPrimeField, CurveAffineExt, ScalarField
-    }, 
-    Context, halo2_proofs::{
+            }, BaseCircuitParams, CircuitBuilderStage
+        }, GateInstructions, RangeChip, RangeInstructions
+    }, halo2_proofs::{
         dev::{
             metadata::Column, MockProver
-        }, halo2curves::{
-            bn256::{
-                pairing, G1Affine, G2Affine, G1
-            }
-        }, plonk::{
-            Selector, Advice
-        }, poly::commitment::Prover
-    },
-    halo2_proofs::halo2curves::bn256::{self, Fr}
+        }, halo2curves::bn256::{
+                self, pairing, Bn256, Fr, G1Affine, G2Affine, G1
+            }, plonk::{
+            Advice, Selector
+        }, poly::{commitment::{ParamsProver, Prover}, kzg::commitment::ParamsKZG}
+    }, utils::{
+        fs::gen_srs, testing::gen_proof, BigPrimeField, CurveAffineExt, ScalarField
+    }, virtual_region::lookups, Context
 };
 
 use halo2curves::{ff::{BitViewSized, PrimeField}, group::Curve, CurveAffine};
@@ -278,6 +273,180 @@ fn test_pairing_circuit() {
 }
 
 
+fn generate_circuit(k: u32, fill: bool) -> Snark {
+    let lookups_bits = k as usize - 1;
+    let circuit_params = BaseCircuitParams {
+        k: 19 as usize,
+        num_advice_per_phase: vec![15],
+        num_lookup_advice_per_phase: vec![5],
+        num_fixed: 1,
+        lookup_bits: Some(18), 
+        num_instance_columns: 1,
+    };
+    let mut builder = BaseCircuitBuilder::new(false).use_params(circuit_params);
+    let range = builder.range_chip();
+
+    let ctx = builder.main(0);
+
+    // let x = ctx.load_witness(Fr::from(14));
+    // if fill {
+    //     for _ in 0..2 << k {
+    //         range.gate().add(ctx, x, x);
+    //     }
+    // }
+
+    let p = G1Affine::generator();
+    let q = G2Affine::generator();
+    let ic = vec![p, p];
+    let fp_chip = FpChip::new(&range, 90, 3);
+    let pairing_chip = PairingChip::new(&fp_chip);
+    let alpha1_assigned = pairing_chip.load_private_g1_unchecked(ctx, p);
+    let beta2_assigned = pairing_chip.load_private_g2_unchecked(ctx, q);
+    let gamma2_assigned = pairing_chip.load_private_g2_unchecked(ctx, q);
+    let delta2_assigned = pairing_chip.load_private_g2_unchecked(ctx, q);
+
+    let ic_assigned = ic.iter().map(|ic| pairing_chip.load_private_g1_unchecked(ctx, *ic)).collect::<Vec<_>>();
+
+    // println!("ic_assigned: {:?}", ic_assigned);
+
+    // // let dummy_proof = get_dummy_proof();
+    let dummy_proof = get_dummy_proof();
+
+    //declare our chips for performing the ecc operations
+    let fp2_chip = Fp2Chip::<Fr>::new(&fp_chip);
+    let g2_chip = EccChip::new(&fp2_chip);
+
+    //extract the points of proof and public inputs
+    let a_neg = dummy_proof.a.neg();
+    let neg_a_assigned = pairing_chip.load_private_g1_unchecked(ctx, a_neg);
+    let b_assigned = pairing_chip.load_private_g2_unchecked(ctx, dummy_proof.b);
+    let c_assigned = pairing_chip.load_private_g1_unchecked(ctx, dummy_proof.c);
+    let public_inputs = dummy_proof.public_inputs;
+
+    // // Implement vk_x = vk.ic[0];
+    let mut vk_x_assigned = &ic_assigned[0].clone();
+    let mut temp;
+    for i in 0..public_inputs.len() {
+    
+            //second different approach
+        let public_value = fp_chip.load_constant(ctx,  bn256::Fq::from_u64_digits(&[public_inputs[i]]));
+        let base_chip = g2_chip.field_chip;
+        let vk_x_i_plus_1 = ic_assigned[i+1].clone();
+
+        let vk_x_mul_input = scalar_multiply::<Fr,_,G1Affine >(
+            base_chip.fp_chip(), 
+            ctx,
+            vk_x_i_plus_1.clone(),
+            public_value.limbs().to_vec(),
+            g2_chip.field_chip.fp_chip().limb_bits,
+            4);
+
+
+        temp = ec_add_unequal(
+            base_chip.fp_chip(), 
+            ctx, 
+            vk_x_mul_input.clone(), 
+            vk_x_assigned.clone(), 
+            true);
+
+        vk_x_assigned = &temp;
+
+    }
+
+    // let p1 = pairing_chip.pairing(ctx, &b_assigned, &neg_a_assigned);
+    // let p2 = pairing_chip.pairing(ctx, &beta2_assigned, &alpha1_assigned);
+    // let p3 = pairing_chip.pairing(ctx, &gamma2_assigned, &vk_x_assigned);
+    // let p4 = pairing_chip.pairing(ctx, &delta2_assigned, &c_assigned);
+
+
+    // let fp12_chip = Fp12Chip::<Fr>::new(&fp_chip);
+
+    // let p1_p2 = fp12_chip.mul(ctx, &p1, &p2);
+
+    // let p3_p4 = fp12_chip.mul(ctx, &p3, &p4);
+
+    // let p1_p2_p3_p4 = fp12_chip.mul(ctx, &p1_p2, &p3_p4);
+
+    // println!("p1_p2_p3_p4 {:?}", fp12_chip.get_assigned_value(&p1_p2_p3_p4.into()));
+
+    
+    let params = gen_srss(k);
+    println!("Got params");
+    // do not call calculate_params, we want to use fixed params
+    let pk = gen_pk(&params, &builder, None);
+
+    gen_snark_shplonk(&params, &pk, builder, None::<&str>)
+
+}
+
+pub fn read_or_create_srs<'a, C: CurveAffine, P: ParamsProver<'a, C>>(
+    k: u32,
+    setup: impl Fn(u32) -> P,
+) -> P {
+    let dir = var("PARAMS_DIR").unwrap_or_else(|_| "./params".to_string());
+    println!("dir: {dir}");
+    let path = format!("{dir}/kzg_bn254_{k}.srs");
+    println!("path: {path}");
+    match File::open(path.as_str()) {
+        Ok(f) => {
+            // #[cfg(feature = "display")]
+            println!("read params from {path}");
+            let mut reader = BufReader::new(f);
+            P::read(&mut reader).unwrap()
+        }
+        Err(_) => {
+            #[cfg(feature = "display")]
+            println!("creating params for {k}");
+            fs::create_dir_all(dir).unwrap();
+            let params = setup(k);
+            params.write(&mut BufWriter::new(File::create(path).unwrap())).unwrap();
+            params
+        }
+    }
+}
+
+pub fn gen_srss(k: u32) -> ParamsKZG<Bn256> {
+    read_or_create_srs::<G1Affine, _>(k, |k| {
+        ParamsKZG::<Bn256>::setup(k, ChaCha20Rng::from_seed(Default::default()))
+    })
+}
+
+
 fn main(){
-    println!("Hello, world!");
+    let dummy_snark = generate_circuit(19, false);
+
+    let k = 16u32;
+    let lookup_bits = k as usize - 1;
+    let params = gen_srs(k);
+    let mut agg_circuit = AggregationCircuit::new::<SHPLONK>(
+        CircuitBuilderStage::Keygen,
+        AggregationConfigParams { degree: k, lookup_bits, ..Default::default() },
+        &params,
+        vec![dummy_snark],
+        VerifierUniversality::Full,
+    );
+    let agg_config = agg_circuit.calculate_params(Some(10));
+
+    // // let start0 = start_timer!(|| "gen vk & pk");
+    // let pk = gen_pk(&params, &agg_circuit, None);
+    // // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
+    // // let _pk = gen_pk(&params, &agg_circuit, Some(Path::new("examples/agg.pk")));
+    // // end_timer!(start0);
+    // // let pk = read_pk::<AggregationCircuit>(Path::new("examples/agg.pk"), agg_config).unwrap();
+    // // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
+    // let break_points = agg_circuit.break_points();
+
+    // let snarks = (10..11).map(|k| generate_circuit(k, true));
+    // for (i, snark) in snarks.into_iter().enumerate() {
+    //     let agg_circuit = AggregationCircuit::new::<SHPLONK>(
+    //         CircuitBuilderStage::Prover,
+    //         agg_config,
+    //         &params,
+    //         vec![snark],
+    //         VerifierUniversality::Full,
+    //     )
+    //     .use_break_points(break_points.clone());
+    //     let _snark = gen_snark_shplonk(&params, &pk, agg_circuit, None::<&str>);
+    //     println!("snark {i} success");
+    // }
 }
