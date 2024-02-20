@@ -414,7 +414,7 @@ pub fn gen_srss(k: u32) -> ParamsKZG<Bn256> {
 fn main(){
     let dummy_snark = generate_circuit(19, false);
 
-    let k = 16u32;
+    let k = 20u32;
     let lookup_bits = k as usize - 1;
     let params = gen_srs(k);
     let mut agg_circuit = AggregationCircuit::new::<SHPLONK>(
