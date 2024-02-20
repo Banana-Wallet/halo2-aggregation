@@ -421,7 +421,7 @@ fn main(){
         CircuitBuilderStage::Keygen,
         AggregationConfigParams { degree: k, lookup_bits,..Default::default() },
         &params,
-        vec![dummy_snark.clone()],
+        vec![dummy_snark.clone(), dummy_snark.clone()],
         VerifierUniversality::Full,
     );
     let agg_config = agg_circuit.calculate_params(Some(10));
