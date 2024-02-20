@@ -297,75 +297,75 @@ fn generate_circuit(k: u32, fill: bool) -> Snark {
     let fp_chip = FpChip::new(&range, 90, 3);
     let pairing_chip = PairingChip::new(&fp_chip);
 
-    let verif_key = get_verification_key2();
-    let alpha1_assigned = pairing_chip.load_private_g1_unchecked(ctx, verif_key.alpha1);
-    let beta2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.beta2);
-    let gamma2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.gamma2);
-    let delta2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.delta2);
-    let ic_assigned = verif_key.ic.iter().map(|ic| pairing_chip.load_private_g1_unchecked(ctx, *ic)).collect::<Vec<_>>();
+    // let verif_key = get_verification_key2();
+    // let alpha1_assigned = pairing_chip.load_private_g1_unchecked(ctx, verif_key.alpha1);
+    // let beta2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.beta2);
+    // let gamma2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.gamma2);
+    // let delta2_assigned = pairing_chip.load_private_g2_unchecked(ctx, verif_key.delta2);
+    // let ic_assigned = verif_key.ic.iter().map(|ic| pairing_chip.load_private_g1_unchecked(ctx, *ic)).collect::<Vec<_>>();
 
-    // println!("ic_assigned: {:?}", ic_assigned);
+    // // println!("ic_assigned: {:?}", ic_assigned);
 
-    // // let dummy_proof = get_dummy_proof();
-    let dummy_proof = get_dummy_proof2();
+    // // // let dummy_proof = get_dummy_proof();
+    // let dummy_proof = get_dummy_proof2();
 
-    //declare our chips for performing the ecc operations
-    let fp2_chip = Fp2Chip::<Fr>::new(&fp_chip);
-    let g2_chip = EccChip::new(&fp2_chip);
+    // //declare our chips for performing the ecc operations
+    // let fp2_chip = Fp2Chip::<Fr>::new(&fp_chip);
+    // let g2_chip = EccChip::new(&fp2_chip);
 
-    //extract the points of proof and public inputs
-    let a_neg = dummy_proof.a.neg();
-    let neg_a_assigned = pairing_chip.load_private_g1_unchecked(ctx, a_neg);
-    let b_assigned = pairing_chip.load_private_g2_unchecked(ctx, dummy_proof.b);
-    let c_assigned = pairing_chip.load_private_g1_unchecked(ctx, dummy_proof.c);
-    let public_inputs = dummy_proof.public_inputs;
+    // //extract the points of proof and public inputs
+    // let a_neg = dummy_proof.a.neg();
+    // let neg_a_assigned = pairing_chip.load_private_g1_unchecked(ctx, a_neg);
+    // let b_assigned = pairing_chip.load_private_g2_unchecked(ctx, dummy_proof.b);
+    // let c_assigned = pairing_chip.load_private_g1_unchecked(ctx, dummy_proof.c);
+    // let public_inputs = dummy_proof.public_inputs;
 
-    // // Implement vk_x = vk.ic[0];
-    let mut vk_x_assigned = &ic_assigned[0].clone();
-    let mut temp;
-    for i in 0..public_inputs.len() {
+    // // // Implement vk_x = vk.ic[0];
+    // let mut vk_x_assigned = &ic_assigned[0].clone();
+    // let mut temp;
+    // for i in 0..public_inputs.len() {
     
-            //second different approach
-            let public_value = fp_chip.load_constant(ctx,  bn256::Fq::from_str_vartime(&public_inputs[i]).unwrap());
+    //         //second different approach
+    //         let public_value = fp_chip.load_constant(ctx,  bn256::Fq::from_str_vartime(&public_inputs[i]).unwrap());
         
-            let base_chip = g2_chip.field_chip;
-            let vk_x_i_plus_1 = ic_assigned[i+1].clone();
+    //         let base_chip = g2_chip.field_chip;
+    //         let vk_x_i_plus_1 = ic_assigned[i+1].clone();
 
-            let vk_x_mul_input = scalar_multiply::<Fr,_,G1Affine >(
-                base_chip.fp_chip(), 
-                ctx,
-                vk_x_i_plus_1.clone(),
-                public_value.limbs().to_vec(),
-                g2_chip.field_chip.fp_chip().limb_bits,
-                4);
-
-
-            temp = ec_add_unequal(
-                base_chip.fp_chip(), 
-                ctx, 
-                vk_x_mul_input.clone(), 
-                vk_x_assigned.clone(), 
-                true);
-
-            vk_x_assigned = &temp;
-
-    }
-
-    let p1 = pairing_chip.pairing(ctx, &b_assigned, &neg_a_assigned);
-    let p2 = pairing_chip.pairing(ctx, &beta2_assigned, &alpha1_assigned);
-    let p3 = pairing_chip.pairing(ctx, &gamma2_assigned, &vk_x_assigned);
-    let p4 = pairing_chip.pairing(ctx, &delta2_assigned, &c_assigned);
+    //         let vk_x_mul_input = scalar_multiply::<Fr,_,G1Affine >(
+    //             base_chip.fp_chip(), 
+    //             ctx,
+    //             vk_x_i_plus_1.clone(),
+    //             public_value.limbs().to_vec(),
+    //             g2_chip.field_chip.fp_chip().limb_bits,
+    //             4);
 
 
-    let fp12_chip = Fp12Chip::<Fr>::new(&fp_chip);
+    //         temp = ec_add_unequal(
+    //             base_chip.fp_chip(), 
+    //             ctx, 
+    //             vk_x_mul_input.clone(), 
+    //             vk_x_assigned.clone(), 
+    //             true);
 
-    let p1_p2 = fp12_chip.mul(ctx, &p1, &p2);
+    //         vk_x_assigned = &temp;
 
-    let p3_p4 = fp12_chip.mul(ctx, &p3, &p4);
+    // }
 
-    let p1_p2_p3_p4 = fp12_chip.mul(ctx, &p1_p2, &p3_p4);
+    // let p1 = pairing_chip.pairing(ctx, &b_assigned, &neg_a_assigned);
+    // let p2 = pairing_chip.pairing(ctx, &beta2_assigned, &alpha1_assigned);
+    // let p3 = pairing_chip.pairing(ctx, &gamma2_assigned, &vk_x_assigned);
+    // let p4 = pairing_chip.pairing(ctx, &delta2_assigned, &c_assigned);
 
-    println!("p1_p2_p3_p4 {:?}", fp12_chip.get_assigned_value(&p1_p2_p3_p4.into()));
+
+    // let fp12_chip = Fp12Chip::<Fr>::new(&fp_chip);
+
+    // let p1_p2 = fp12_chip.mul(ctx, &p1, &p2);
+
+    // let p3_p4 = fp12_chip.mul(ctx, &p3, &p4);
+
+    // let p1_p2_p3_p4 = fp12_chip.mul(ctx, &p1_p2, &p3_p4);
+
+    // println!("p1_p2_p3_p4 {:?}", fp12_chip.get_assigned_value(&p1_p2_p3_p4.into()));
 
     
     let params = gen_srss(k);
