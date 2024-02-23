@@ -273,7 +273,7 @@ fn test_pairing_circuit() {
 }
 
 
-fn generate_circuit(k: u32, fill: bool) -> Snark {
+fn generate_circuit(k: u32, fill: bool, ch: i8) -> Snark {
     let lookups_bits = k as usize - 1;
     // let circuit_params = BaseCircuitParams {
     //     k: k as usize,
@@ -315,7 +315,13 @@ fn generate_circuit(k: u32, fill: bool) -> Snark {
     // println!("ic_assigned: {:?}", ic_assigned);
 
     // // let dummy_proof = get_dummy_proof();
-    let dummy_proof = get_dummy_proof2();
+    let dummy_proof;
+    if ch == 2 {
+        dummy_proof = get_dummy_proof2_choice2();
+    } else {
+        dummy_proof = get_dummy_proof2();
+    }
+    // let dummy_proof = get_dummy_proof2();
 
     //declare our chips for performing the ecc operations
     let fp2_chip = Fp2Chip::<Fr>::new(&fp_chip);
@@ -420,7 +426,7 @@ pub fn gen_srss(k: u32) -> ParamsKZG<Bn256> {
 
 
 fn main(){
-    let dummy_snark = generate_circuit(19, false);
+    let dummy_snark = generate_circuit(19, false, 1);
 
     let k = 20u32;
     let lookup_bits = k as usize - 1;
@@ -444,7 +450,7 @@ fn main(){
     // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
     let break_points = agg_circuit.break_points();
 
-    let snarks = (19..22).map(|k| generate_circuit(k, true));
+    let snarks = (1..3).map(|ch| generate_circuit(19, true, ch));
     for (i, snark) in snarks.into_iter().enumerate() {
         let agg_circuit = AggregationCircuit::new::<SHPLONK>(
             CircuitBuilderStage::Prover,
