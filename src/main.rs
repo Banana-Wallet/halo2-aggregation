@@ -450,7 +450,7 @@ fn main(){
     // std::fs::remove_file(Path::new("examples/agg.pk")).ok();
     let break_points = agg_circuit.break_points();
 
-    let snarks = (1..3).map(|ch| generate_circuit(19, true, ch));
+    let snarks = (1..2).map(|ch| generate_circuit(19, true, ch));
     for (i, snark) in snarks.into_iter().enumerate() {
         let agg_circuit = AggregationCircuit::new::<SHPLONK>(
             CircuitBuilderStage::Prover,
